@@ -1,86 +1,52 @@
-import { useState } from "react";
-import axios from "axios";
+import { useState } from 'react';
+import axios from 'axios';
+import { marked } from 'marked';
 
 const GeminiTester = () => {
-  const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState("");
+  const [prompt, setPrompt] = useState('');
+  const [responses, setResponses] = useState([]);  // Store multiple responses
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemini-pro");
-  const [responseTime, setResponseTime] = useState(null);
+  const [error, setError] = useState('');
+  const [selectedModel, setSelectedModel] = useState('gemini-pro');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setResponse("");
+    setError('');
     const startTime = Date.now();
 
     try {
-      const { data } = await axios.post("http://localhost:3001/api/generate", {
+      const { data } = await axios.post('http://localhost:3001/api/generate', {
         prompt,
         model: selectedModel,
       });
 
-      setResponse(data.generated_text);
-      setResponseTime((Date.now() - startTime) / 1000);
+      const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+      const newResponse = {
+        id: Date.now(),  // Unique ID for each response
+        text: data.generated_text,
+        prompt,
+        responseTime,
+      };
+
+      setResponses([newResponse, ...responses]);  // Add new response at the top
+      setPrompt('');  // Clear the prompt input
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      setError(err.response?.data?.error || 'Something went wrong');
     } finally {
       setLoading(false);
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(response);
-    alert("Copied to clipboard!");
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    alert('Copied to clipboard!');
   };
-  const parseMarkdown = (content) => {
-    const parts = content.split(/(`{3}[a-z]*\n[\s\S]*?\n`{3})/g);
 
-    return parts.map((part, index) => {
-      // Check if this part is a code block
-      if (part.startsWith("```")) {
-        const lines = part.split("\n");
-        const language = lines[0].replace("```", "");
-        const code = lines.slice(1, -1).join("\n");
-
-        return (
-          <pre
-            key={index}
-            className="my-4 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-400">{language}</span>
-            </div>
-            <code className="block font-mono text-sm">{code}</code>
-          </pre>
-        );
-      }
-      const inlineParts = part.split(/(`[^`]+`)/g);
-      return (
-        <div key={index} className="whitespace-pre-wrap">
-          {inlineParts.map((inlinePart, i) => {
-            if (inlinePart.startsWith("`") && inlinePart.endsWith("`")) {
-              return (
-                <code
-                  key={i}
-                  className="px-1.5 py-0.5 bg-gray-100 rounded font-mono text-sm"
-                >
-                  {inlinePart.slice(1, -1)}
-                </code>
-              );
-            }
-            return inlinePart;
-          })}
-        </div>
-      );
-    });
-  };
   return (
     <div className="container">
       <h1>Gemini API Tester</h1>
-
+      
       <form onSubmit={handleSubmit}>
         <div className="input-group">
           <label htmlFor="model">Model:</label>
@@ -107,29 +73,31 @@ const GeminiTester = () => {
 
         <div className="button-group">
           <button type="submit" disabled={loading || !prompt.trim()}>
-            {loading ? "Generating..." : "Generate"}
+            {loading ? 'Generating...' : 'Generate'}
           </button>
-          {response && (
-            <button type="button" onClick={copyToClipboard}>
-              Copy Response
-            </button>
-          )}
         </div>
       </form>
 
       {error && <div className="error">{error}</div>}
 
-      {response && (
-        <div className="response-section">
-          <div className="response-header">
-            <h3>Response</h3>
-            {responseTime && (
-              <span>Generated in {responseTime.toFixed(2)}s</span>
-            )}
+      {/* Chat-style response list */}
+      <div className="chat-container">
+        {responses.map(({ id, text, prompt, responseTime }) => (
+          <div key={id} className="chat-message">
+            <div className="chat-prompt">
+              <strong>Prompt:</strong> {prompt}
+            </div>
+            <div
+              className="chat-response"
+              dangerouslySetInnerHTML={{ __html: marked(text) }}
+            />
+            <div className="chat-info">
+              <span>Generated in {responseTime}s</span>
+              <button onClick={() => copyToClipboard(text)}>Copy</button>
+            </div>
           </div>
-          <div className="response-content">{parseMarkdown(response)}</div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 };
